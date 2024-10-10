@@ -1,13 +1,23 @@
+#include "raylib.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "raylib.h"
 
+#define MAX_BODIES 128
+#define WORLD_HEIGHT 600;
+#define WORLD_WIDTH 600
+
+typedef struct Body {
+  float mass;
+  Vector2 position;
+} Body;
 
 typedef struct Node {
-    uint32_t children; // this id and the next 3
-    Rectangle Squeare;
+  uint32_t children; // this id and the next 3
+  float mass;
+  Vector2 centerOfMass;
+  Rectangle Squeare;
 } Node;
 
 typedef struct DynamicArrayNode {
@@ -19,7 +29,8 @@ typedef struct DynamicArrayNode {
 DynamicArrayNode *addElement(DynamicArrayNode *array, Node element) {
   const uint8_t capacityMultiplier = 2;
   if (array->length == array->capacity) {
-    array->elements = realloc(array->elements, sizeof(Node) * array->capacity * capacityMultiplier);
+    array->elements = realloc(array->elements, sizeof(Node) * array->capacity *
+                                                   capacityMultiplier);
     array->capacity *= capacityMultiplier;
   }
 
@@ -39,20 +50,29 @@ DynamicArrayNode *newDynamicArrayUnInt() {
   return arr;
 }
 
+void freeDynamicArray(DynamicArrayNode *array) {
+  free(array->elements);
+  free(array);
+}
+
 struct QuadTree {
-    DynamicArrayNode* nodes;
+  DynamicArrayNode *nodes;
 };
 
 int main() {
+  const int nBodies = 3;
+  Body bodies[MAX_BODIES];
+
+  for (int i = 0; i < nBodies; ++i) {
+    bodies[i] = ( Body ){ 1, {20 * (i + 1), 20 * (i + 1)} };
+  }
+
   DynamicArrayNode *arr = newDynamicArrayUnInt();
-  Node  n = {0, {1, 1, 1, 1}};
 
-  addElement(arr, n);
+  for (int i = 0; i < nBodies; ++i) {
+      printf("Body %d: %f %f\n", i, bodies[i].position.x, bodies[i].position.y);
+  }
 
-  printf("Length: %d\n", arr->length);
-  printf("Capacity: %d\n", arr->capacity);
-  printf("Element: %d\n", arr->elements[0].children);
-  printf("Element: %f\n", arr->elements[0].Squeare.x);
-
+  freeDynamicArray(arr);
   return 0;
 }

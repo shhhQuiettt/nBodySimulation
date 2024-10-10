@@ -1,13 +1,13 @@
 #include "raylib.h"
 #include "raymath.h"
-#include <time.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-#define MAX_BODIES 128
+#define MAX_BODIES 10000
 #define WORLD_HEIGHT 600
 #define WORLD_WIDTH 600
 
@@ -32,18 +32,17 @@ typedef struct DynamicArrayNode {
   uint32_t capacity;
 } DynamicArrayNode;
 
-DynamicArrayNode *addElement(DynamicArrayNode *array, Node element) {
+void addElement(DynamicArrayNode **array, Node element) {
   const uint8_t capacityMultiplier = 2;
-  if (array->length == array->capacity) {
-    array->elements = realloc(array->elements, sizeof(Node) * array->capacity *
-                                                   capacityMultiplier);
-    array->capacity *= capacityMultiplier;
+  if ((*array)->length == (*array)->capacity) {
+    (*array)->elements =
+        realloc((*array)->elements,
+                sizeof(Node) * (*array)->capacity * capacityMultiplier);
+    (*array)->capacity *= capacityMultiplier;
   }
 
-  array->elements[array->length] = element;
-  array->length += 1;
-
-  return array;
+  (*array)->elements[(*array)->length] = element;
+  (*array)->length += 1;
 }
 
 DynamicArrayNode *newDynamicArrayNode() {
@@ -114,8 +113,13 @@ Node initNode(Rectangle square) {
 }
 
 uint32_t subdivide(QuadTree *tree, uint32_t nodeID) {
-    printf("Subdividing node %d\n", nodeID);
+  /* printf("Subdividing node %d\n", nodeID); */
+
   // sanity check
+  if (nodeID >= tree->nodes->length) {
+    printf("Subdivide: Node id %d is out of bounds\n", nodeID);
+    exit(1);
+  }
   Node *currentNode = &tree->nodes->elements[nodeID];
   if (isEmpty(*currentNode) || !isLeaf(*currentNode)) {
     printf("Sanity check failed: isEmpty: %d; isLeaf: %d",
@@ -123,6 +127,7 @@ uint32_t subdivide(QuadTree *tree, uint32_t nodeID) {
     exit(1);
   }
   uint32_t childrenID = tree->nodes->length;
+  currentNode->children = childrenID;
 
   int leftWidth = currentNode->Squeare.width / 2;
   int rightWidth = currentNode->Squeare.width - leftWidth;
@@ -141,12 +146,11 @@ uint32_t subdivide(QuadTree *tree, uint32_t nodeID) {
                                           currentNode->Squeare.y + topHeight,
                                           rightWidth, bottomHeight});
 
-  tree->nodes = addElement(tree->nodes, topLeft);
-  tree->nodes = addElement(tree->nodes, topRight);
-  tree->nodes = addElement(tree->nodes, bottomLeft);
-  tree->nodes = addElement(tree->nodes, bottomRight);
+  addElement(&tree->nodes, topLeft);
+  addElement(&tree->nodes, topRight);
+  addElement(&tree->nodes, bottomLeft);
+  addElement(&tree->nodes, bottomRight);
 
-  currentNode->children = childrenID;
   return childrenID;
 }
 
@@ -158,14 +162,19 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
              (Vector2){(float)WORLD_WIDTH / 2, (float)WORLD_HEIGHT / 2},
              (Rectangle){0, 0, WORLD_WIDTH, WORLD_HEIGHT}};
 
-  tree->nodes = addElement(tree->nodes, firstNode);
+  addElement(&tree->nodes, firstNode);
 
   for (uint32_t bodyID = 0; bodyID < nBodies; ++bodyID) {
+      /* printf("Body %d\n", bodyID); */
     /* bool bodyAdded = false; */
     /* printTree(tree); */
     /* printf("\n"); */
     int nodeID = 0;
     while (0 == 0) {
+      if (nodeID >= tree->nodes->length) {
+        printf("Node id %d is out of bounds\n", nodeID);
+        exit(1);
+      }
       Node *currentNode = &tree->nodes->elements[nodeID];
       /* printf("Body %d, node %d\n", bodyID, nodeID); */
       if (isLeaf(*currentNode)) {
@@ -175,15 +184,17 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
           break;
         } else {
           uint32_t childrenID = subdivide(tree, nodeID);
+          currentNode = &tree->nodes->elements[nodeID];
           currentNode->children = childrenID;
 
-          // move the current node mass to the new children because it is one particle
+          // move the current node mass to the new children because it is one
+          // particle
           int oldCenterOfMassOffset =
               childOffset(currentNode->centerOfMass, currentNode->SquereCenter);
           tree->nodes->elements[childrenID + oldCenterOfMassOffset].mass =
               currentNode->mass;
-          tree->nodes->elements[childrenID + oldCenterOfMassOffset].centerOfMass =
-              currentNode->centerOfMass;
+          tree->nodes->elements[childrenID + oldCenterOfMassOffset]
+              .centerOfMass = currentNode->centerOfMass;
 
           // is it correct?
           //
@@ -192,12 +203,11 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
               Vector2Scale(currentNode->centerOfMass, currentNode->mass);
           Vector2 scaledBodyCenterOfMass =
               Vector2Scale(bodies[bodyID].position, bodies[bodyID].mass);
-          Vector2 newParentCenterOfMass =
-              Vector2Scale(Vector2Add(scaledBodyCenterOfMass, scaledOrginalCenterOfMass), 1 / newParentMass);
+          Vector2 newParentCenterOfMass = Vector2Scale(
+              Vector2Add(scaledBodyCenterOfMass, scaledOrginalCenterOfMass),
+              1 / newParentMass);
           currentNode->mass = newParentMass;
           currentNode->centerOfMass = newParentCenterOfMass;
-
-
 
           int offset =
               childOffset(bodies[bodyID].position, currentNode->SquereCenter);
@@ -217,7 +227,7 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
 }
 
 int main() {
-  const int nBodies = 30;
+  const int nBodies = 5000;
   Body bodies[MAX_BODIES];
 
   /* SetRandomSeed(time(NULL)); */
@@ -232,6 +242,7 @@ int main() {
   }
 
   QuadTree *tree = buildTree(bodies, nBodies);
+  printTree(tree);
 
   /* printTree(tree); */
   InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "N body simulaion");
@@ -240,16 +251,14 @@ int main() {
     BeginDrawing();
     ClearBackground(BLACK);
     for (int i = 0; i < nBodies; ++i) {
-      DrawCircleV(bodies[i].position, 3, WHITE);
+      DrawCircleV(bodies[i].position, 2, WHITE);
         //Small text of bodyid
-      DrawText(TextFormat("%d", i), bodies[i].position.x, bodies[i].position.y, 10, WHITE);
     }
 
-    for (int i = 0; i < tree->nodes->length; ++i) {
-      Node node = tree->nodes->elements[i];
-      DrawRectangleLinesEx(node.Squeare, 1, RED);
-    }
-  /* printTree(tree); */
+    /* for (int i = 0; i < tree->nodes->length; ++i) { */
+    /*   Node node = tree->nodes->elements[i]; */
+    /*   DrawRectangleLinesEx(node.Squeare, 1, RED); */
+    /* } */
     EndDrawing();
   }
 

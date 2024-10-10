@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "raymath.h"
+#include <time.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -13,6 +14,8 @@
 typedef struct Body {
   float mass;
   Vector2 position;
+  Vector2 velocity;
+  Vector2 acceleration;
 } Body;
 
 typedef struct Node {
@@ -62,9 +65,46 @@ typedef struct QuadTree {
   DynamicArrayNode *nodes;
 } QuadTree;
 
+void printNode(Node node, uint32_t nodeID) {
+  printf("Node %d: Center of mass %f %f, mass: %f children: %d ", nodeID,
+         node.centerOfMass.x, node.centerOfMass.y, node.mass, node.children);
+  printf("Square: x: %f, y: %f, width: %f, height: %f\n", node.Squeare.x,
+         node.Squeare.y, node.Squeare.width, node.Squeare.height);
+}
+
+void printTree(QuadTree *tree) {
+  for (uint32_t i = 0; i < tree->nodes->length; ++i) {
+    Node node = tree->nodes->elements[i];
+    printNode(node, i);
+  }
+}
+
 bool isLeaf(Node node) { return node.children == 0; }
 
 bool isEmpty(Node node) { return node.mass == 0; }
+
+enum CHILD_OFFSET {
+  TOP_LEFT = 0,
+  TOP_RIGHT = 1,
+  BOTTOM_LEFT = 2,
+  BOTTOM_RIGHT = 3
+};
+
+enum CHILD_OFFSET childOffset(Vector2 position, Vector2 parentCenter) {
+  if (position.x < parentCenter.x) {
+    if (position.y < parentCenter.y) {
+      return TOP_LEFT;
+    } else {
+      return BOTTOM_LEFT;
+    }
+  } else {
+    if (position.y < parentCenter.y) {
+      return TOP_RIGHT;
+    } else {
+      return BOTTOM_RIGHT;
+    }
+  }
+}
 
 Node initNode(Rectangle square) {
   return (Node){
@@ -74,11 +114,13 @@ Node initNode(Rectangle square) {
 }
 
 uint32_t subdivide(QuadTree *tree, uint32_t nodeID) {
+    printf("Subdividing node %d\n", nodeID);
   // sanity check
   Node *currentNode = &tree->nodes->elements[nodeID];
-  if (!isEmpty(*currentNode) || !isLeaf(*currentNode)) {
+  if (isEmpty(*currentNode) || !isLeaf(*currentNode)) {
     printf("Sanity check failed: isEmpty: %d; isLeaf: %d",
            isEmpty(*currentNode), isLeaf(*currentNode));
+    exit(1);
   }
   uint32_t childrenID = tree->nodes->length;
 
@@ -87,10 +129,18 @@ uint32_t subdivide(QuadTree *tree, uint32_t nodeID) {
   int topHeight = currentNode->Squeare.height / 2;
   int bottomHeight = currentNode->Squeare.height - topHeight;
 
-  Node topLeft = initNode((Rectangle){currentNode->Squeare.x, currentNode->Squeare.y, leftWidth, topHeight});
-  Node topRight = initNode((Rectangle){currentNode->Squeare.x + leftWidth, currentNode->Squeare.y, rightWidth, topHeight});
-  Node bottomLeft = initNode((Rectangle){currentNode->Squeare.x, currentNode->Squeare.y + topHeight, leftWidth, bottomHeight});
-  Node bottomRight = initNode((Rectangle){currentNode->Squeare.x + leftWidth, currentNode->Squeare.y + topHeight, rightWidth, bottomHeight});
+  Node topLeft = initNode((Rectangle){
+      currentNode->Squeare.x, currentNode->Squeare.y, leftWidth, topHeight});
+  Node topRight =
+      initNode((Rectangle){currentNode->Squeare.x + leftWidth,
+                           currentNode->Squeare.y, rightWidth, topHeight});
+  Node bottomLeft = initNode((Rectangle){currentNode->Squeare.x,
+                                         currentNode->Squeare.y + topHeight,
+                                         leftWidth, bottomHeight});
+  Node bottomRight = initNode((Rectangle){currentNode->Squeare.x + leftWidth,
+                                          currentNode->Squeare.y + topHeight,
+                                          rightWidth, bottomHeight});
+
   tree->nodes = addElement(tree->nodes, topLeft);
   tree->nodes = addElement(tree->nodes, topRight);
   tree->nodes = addElement(tree->nodes, bottomLeft);
@@ -110,46 +160,103 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
 
   tree->nodes = addElement(tree->nodes, firstNode);
 
-  for (int bodyID = 0; bodyID < nBodies; ++bodyID) {
+  for (uint32_t bodyID = 0; bodyID < nBodies; ++bodyID) {
+    /* bool bodyAdded = false; */
+    /* printTree(tree); */
+    /* printf("\n"); */
     int nodeID = 0;
     while (0 == 0) {
       Node *currentNode = &tree->nodes->elements[nodeID];
+      /* printf("Body %d, node %d\n", bodyID, nodeID); */
       if (isLeaf(*currentNode)) {
         if (isEmpty(*currentNode)) {
           currentNode->mass = bodies[bodyID].mass;
           currentNode->centerOfMass = bodies[bodyID].position;
+          break;
         } else {
           uint32_t childrenID = subdivide(tree, nodeID);
+          currentNode->children = childrenID;
+
+          // move the current node mass to the new children because it is one particle
+          int oldCenterOfMassOffset =
+              childOffset(currentNode->centerOfMass, currentNode->SquereCenter);
+          tree->nodes->elements[childrenID + oldCenterOfMassOffset].mass =
+              currentNode->mass;
+          tree->nodes->elements[childrenID + oldCenterOfMassOffset].centerOfMass =
+              currentNode->centerOfMass;
+
           // is it correct?
-          float newMass = currentNode->mass + bodies[bodyID].mass;
-          Vector2 scaledOrginal =
+          //
+          float newParentMass = currentNode->mass + bodies[bodyID].mass;
+          Vector2 scaledOrginalCenterOfMass =
               Vector2Scale(currentNode->centerOfMass, currentNode->mass);
-          Vector2 scaledNew =
+          Vector2 scaledBodyCenterOfMass =
               Vector2Scale(bodies[bodyID].position, bodies[bodyID].mass);
-          Vector2 newCenterOfMass =
-              Vector2Scale(Vector2Add(scaledNew, scaledOrginal), 1 / newMass);
-          currentNode->mass = newMass;
-          currentNode->centerOfMass = newCenterOfMass;
+          Vector2 newParentCenterOfMass =
+              Vector2Scale(Vector2Add(scaledBodyCenterOfMass, scaledOrginalCenterOfMass), 1 / newParentMass);
+          currentNode->mass = newParentMass;
+          currentNode->centerOfMass = newParentCenterOfMass;
+
+
+
+          int offset =
+              childOffset(bodies[bodyID].position, currentNode->SquereCenter);
+
+          nodeID = childrenID + offset;
+          continue;
         }
+      } else {
+        int offset =
+            childOffset(bodies[bodyID].position, currentNode->SquereCenter);
+        nodeID = currentNode->children + offset;
+        continue;
       }
     }
   }
+  return tree;
 }
 
 int main() {
-  const int nBodies = 3;
+  const int nBodies = 30;
   Body bodies[MAX_BODIES];
 
+  /* SetRandomSeed(time(NULL)); */
+  SetRandomSeed(423);
   for (int i = 0; i < nBodies; ++i) {
-    bodies[i] = (Body){1, {20 * (i + 1), 20 * (i + 1)}};
+    /* float mass = GetRandomValue(1, 10); */
+    float mass = 5;
+    float x = GetRandomValue(0, WORLD_WIDTH);
+    float y = GetRandomValue(0, WORLD_HEIGHT);
+
+    bodies[i] = (Body){mass, (Vector2){x, y}, (Vector2){0, 0}, (Vector2){0, 0}};
   }
 
-  DynamicArrayNode *arr = newDynamicArrayNode();
+  QuadTree *tree = buildTree(bodies, nBodies);
 
-  for (int i = 0; i < nBodies; ++i) {
-    printf("Body %d: %f %f\n", i, bodies[i].position.x, bodies[i].position.y);
+  /* printTree(tree); */
+  InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "N body simulaion");
+  SetTargetFPS(27);
+  while (!WindowShouldClose()) {
+    BeginDrawing();
+    ClearBackground(BLACK);
+    for (int i = 0; i < nBodies; ++i) {
+      DrawCircleV(bodies[i].position, 3, WHITE);
+        //Small text of bodyid
+      DrawText(TextFormat("%d", i), bodies[i].position.x, bodies[i].position.y, 10, WHITE);
+    }
+
+    for (int i = 0; i < tree->nodes->length; ++i) {
+      Node node = tree->nodes->elements[i];
+      DrawRectangleLinesEx(node.Squeare, 1, RED);
+    }
+  /* printTree(tree); */
+    EndDrawing();
   }
 
-  freeDynamicArray(arr);
+  /* for (kint i = 0; i < nBodies; ++i) { */
+  /*   printf("Body %d: %f %f\n", i, bodies[i].position.x,
+   * bodies[i].position.y); */
+  /* } */
+
   return 0;
 }

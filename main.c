@@ -1,15 +1,17 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
-#define MAX_BODIES 10000
+#define MAX_BODIES 500000
 #define WORLD_HEIGHT 1000
 #define WORLD_WIDTH 1000
+#define DISABLE_DRAWING T
 
 typedef struct Body {
   float mass;
@@ -180,11 +182,12 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
           currentNode->centerOfMass = bodies[bodyID].position;
           break;
         } else {
-            //edge case: two bodies have the same position
-            if (Vector2DistanceSqr(bodies[bodyID].position, currentNode->centerOfMass) < 1.0f) {
-                currentNode->mass += bodies[bodyID].mass;
-                break;
-            }
+          // edge case: two bodies have the same position
+          if (Vector2DistanceSqr(bodies[bodyID].position,
+                                 currentNode->centerOfMass) < 1.0f) {
+            currentNode->mass += bodies[bodyID].mass;
+            break;
+          }
           uint32_t childrenID = subdivide(tree, nodeID);
           currentNode = &tree->nodes->elements[nodeID];
           currentNode->children = childrenID;
@@ -234,56 +237,55 @@ void freeTree(QuadTree *tree) {
 }
 
 int main() {
-  const int nBodies = 10000;
-  Body bodies[MAX_BODIES];
+
+  const uint32_t nBodies = 100;
+  /* Body bodies[MAX_BODIES]; */
+  Body *bodies = malloc(nBodies * sizeof(Body));
 
   SetRandomSeed(time(NULL));
   for (int i = 0; i < nBodies; ++i) {
     /* float mass = GetRandomValue(1, 10); */
     float mass = 5;
-    float x = GetRandomValue(100, WORLD_WIDTH-50);
-    float y = GetRandomValue(100, WORLD_HEIGHT-50);
+    float x = GetRandomValue(100, WORLD_WIDTH - 50);
+    float y = GetRandomValue(100, WORLD_HEIGHT - 50);
 
-    float vx = GetRandomValue(-1, 1);
-    float vy = GetRandomValue(-1, 1);
+    /* float vx = GetRandomValue(-1, 1); */
+    /* float vy = GetRandomValue(-1, 1); */
+    float vx = 1000;
+    float vy = 0;
 
-    bodies[i] = (Body){mass, (Vector2){x, y}, (Vector2){vx, vy}, (Vector2){0, 0}};
+    bodies[i] =
+        (Body){mass, (Vector2){x, y}, (Vector2){vx, vy}, (Vector2){0, 0}};
   }
 
-  /* printTree(tree); */
   InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "N body simulaion");
   SetTargetFPS(27);
-  /* QuadTree *tree = buildTree(bodies, nBodies); */
+  QuadTree *tree = buildTree(bodies, nBodies);
   while (!WindowShouldClose()) {
     QuadTree *tree = buildTree(bodies, nBodies);
     BeginDrawing();
     ClearBackground(BLACK);
     for (int i = 0; i < nBodies; ++i) {
-      DrawCircleV(bodies[i].position, 2, WHITE);
-        //Small text of bodyid
+      DrawCircleV(bodies[i].position, 1, WHITE);
+      // Small text of bodyid
     }
 
-    for (uint32_t i = 0; i < tree->nodes->length; ++i) {
-      Node node = tree->nodes->elements[i];
-      DrawRectangleLinesEx(node.Squeare, 1, RED);
-    }
+    /* for (uint32_t i = 0; i < tree->nodes->length; ++i) { */
+    /*   Node node = tree->nodes->elements[i]; */
+    /*   DrawRectangleLinesEx(node.Squeare, 1, RED); */
+    /* } */
+    printf("%d\n", GetFPS());
     EndDrawing();
     freeTree(tree);
     for (int i = 0; i < nBodies; ++i) {
-      bodies[i].position = Vector2Add(bodies[i].position, bodies[i].velocity);
-      if (bodies[i].position.x > WORLD_WIDTH -5 || bodies[i].position.x < 5) {
+      bodies[i].position = Vector2Add(bodies[i].position, Vector2Scale(bodies[i].velocity, GetFrameTime()));
+      if (bodies[i].position.x > WORLD_WIDTH - 5 || bodies[i].position.x < 5)
         bodies[i].velocity.x *= -1;
-      }
-      if (bodies[i].position.y > WORLD_HEIGHT -5 || bodies[i].position.y < 5) {
+      if (bodies[i].position.y > WORLD_HEIGHT - 5 || bodies[i].position.y < 5) {
         bodies[i].velocity.y *= -1;
       }
     }
   }
-
-  /* for (kint i = 0; i < nBodies; ++i) { */
-  /*   printf("Body %d: %f %f\n", i, bodies[i].position.x,
-   * bodies[i].position.y); */
-  /* } */
 
   return 0;
 }

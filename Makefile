@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -g -Wall -Wextra -O2
+CFLAGS = -g -Wall -Wextra  -O2
 LDFLAGS = -lraylib -lm -lpthread -ldl -lrt -lX11
 
 # Project name and files
@@ -23,9 +23,11 @@ $(TARGET): $(OBJ)
 clean:
 	rm -f $(OBJ) $(TARGET)
 
+
 # Run the program
 run: $(TARGET)
 	./$(TARGET)
+
 
 valgrind: $(TARGET)
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TARGET)

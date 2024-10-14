@@ -6,12 +6,16 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <time.h>
 
-#define MAX_BODIES 500000
-#define WORLD_HEIGHT 1000
-#define WORLD_WIDTH 1000
-#define DISABLE_DRAWING T
+#define WORLD_HEIGHT 500
+#define WORLD_WIDTH 500
+#define MARGIN 10
+#define TARGET_FPS 60
+/* #define GRAVITATIONAL_CONSTANT 6.67430e-11 */
+#define GRAVITATIONAL_CONSTANT 1
+#define N_BODIES 2
 
 typedef struct Body {
   float mass;
@@ -22,6 +26,7 @@ typedef struct Body {
 
 typedef struct Node {
   uint32_t children; // this id and the next 3
+  uint32_t next;     // next Node in acceleration update
   float mass;
   Vector2 centerOfMass;
   Vector2 SquereCenter;
@@ -48,7 +53,7 @@ void addElement(DynamicArrayNode **array, Node element) {
 }
 
 DynamicArrayNode *newDynamicArrayNode() {
-  const uint32_t initialCapacity = 256;
+  const uint32_t initialCapacity = 1024;
   DynamicArrayNode *arr = malloc(sizeof(DynamicArrayNode));
   arr->elements = malloc(initialCapacity * sizeof(Node));
 
@@ -107,9 +112,12 @@ enum CHILD_OFFSET childOffset(Vector2 position, Vector2 parentCenter) {
   }
 }
 
-Node initNode(Rectangle square) {
+Node initNode(Rectangle square, uint32_t next) {
   return (Node){
-      0, 0, (Vector2){-1, -1},
+      0,
+      next,
+      0.0,
+      (Vector2){-1, -1},
       (Vector2){square.x + square.width / 2, square.y + square.height / 2},
       square};
 }
@@ -134,17 +142,22 @@ uint32_t subdivide(QuadTree *tree, uint32_t nodeID) {
   int topHeight = currentNode->Squeare.height / 2;
   int bottomHeight = currentNode->Squeare.height - topHeight;
 
-  Node topLeft = initNode((Rectangle){
-      currentNode->Squeare.x, currentNode->Squeare.y, leftWidth, topHeight});
+  Node topLeft =
+      initNode((Rectangle){currentNode->Squeare.x, currentNode->Squeare.y,
+                           leftWidth, topHeight},
+               childrenID + TOP_RIGHT);
   Node topRight =
       initNode((Rectangle){currentNode->Squeare.x + leftWidth,
-                           currentNode->Squeare.y, rightWidth, topHeight});
+                           currentNode->Squeare.y, rightWidth, topHeight},
+               childrenID + BOTTOM_LEFT);
   Node bottomLeft = initNode((Rectangle){currentNode->Squeare.x,
                                          currentNode->Squeare.y + topHeight,
-                                         leftWidth, bottomHeight});
+                                         leftWidth, bottomHeight},
+                             childrenID + BOTTOM_RIGHT);
   Node bottomRight = initNode((Rectangle){currentNode->Squeare.x + leftWidth,
                                           currentNode->Squeare.y + topHeight,
-                                          rightWidth, bottomHeight});
+                                          rightWidth, bottomHeight},
+                              currentNode->next);
 
   addElement(&tree->nodes, topLeft);
   addElement(&tree->nodes, topRight);
@@ -158,7 +171,10 @@ QuadTree *buildTree(Body *bodies, uint32_t nBodies) {
   QuadTree *tree = malloc(sizeof(QuadTree));
   tree->nodes = newDynamicArrayNode();
   Node firstNode =
-      (Node){0, 0, (Vector2){-1, -1},
+      (Node){0,
+             0,
+             0.0,
+             (Vector2){-1, -1},
              (Vector2){(float)WORLD_WIDTH / 2, (float)WORLD_HEIGHT / 2},
              (Rectangle){0, 0, WORLD_WIDTH, WORLD_HEIGHT}};
 
@@ -236,14 +252,58 @@ void freeTree(QuadTree *tree) {
   free(tree);
 }
 
+void updateAcceleration(Body *bodies, QuadTree *gravityTree, uint32_t nBody,
+                        float maxSizeDistanceQuotient) {
+  for (uint32_t bodyId = 0; bodyId < nBody; ++bodyId) {
+
+    bodies[bodyId].acceleration = (Vector2){0.0, 0.0};
+    uint32_t nodeId = 0;
+    do {
+      Node *currentNode = &gravityTree->nodes->elements[nodeId];
+      float distance =
+          Vector2Distance(bodies[bodyId].position, currentNode->SquereCenter);
+      float size = currentNode->Squeare.width;
+      if (distance / size < maxSizeDistanceQuotient && !isLeaf(*currentNode)) {
+        nodeId = currentNode->children;
+        continue;
+      }
+
+      Vector2 accDirection =
+          Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position);
+      float accMagnitude = currentNode->mass / (distance * distance);
+      Vector2 acceleration = Vector2Scale(accDirection, accMagnitude);
+
+      bodies[bodyId].acceleration =
+          Vector2Add(bodies[bodyId].acceleration, acceleration);
+
+      nodeId = currentNode->next;
+
+    } while (nodeId != 0);
+
+    bodies[bodyId].acceleration =
+        Vector2Scale(bodies[bodyId].acceleration, GRAVITATIONAL_CONSTANT);
+  }
+}
+
+void updateVelocitiesAndPositions(Body *bodies, uint32_t nBody) {
+  for (uint32_t bodyId = 0; bodyId < nBody; ++bodyId) {
+    bodies[bodyId].velocity =
+        Vector2Add(bodies[bodyId].velocity,
+                   Vector2Scale(bodies[bodyId].acceleration, GetFrameTime()));
+
+    bodies[bodyId].position =
+        Vector2Add(bodies[bodyId].position, bodies[bodyId].velocity);
+  }
+}
+
 int main() {
 
-  const uint32_t nBodies = 100;
-  /* Body bodies[MAX_BODIES]; */
+  const uint32_t nBodies = N_BODIES;
   Body *bodies = malloc(nBodies * sizeof(Body));
 
   SetRandomSeed(time(NULL));
-  for (int i = 0; i < nBodies; ++i) {
+  /* SetRandomSeed(42); */
+  for (uint32_t i = 0; i < nBodies; ++i) {
     /* float mass = GetRandomValue(1, 10); */
     float mass = 5;
     float x = GetRandomValue(100, WORLD_WIDTH - 50);
@@ -251,7 +311,7 @@ int main() {
 
     /* float vx = GetRandomValue(-1, 1); */
     /* float vy = GetRandomValue(-1, 1); */
-    float vx = 1000;
+    float vx = 0;
     float vy = 0;
 
     bodies[i] =
@@ -259,32 +319,30 @@ int main() {
   }
 
   InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "N body simulaion");
-  SetTargetFPS(27);
-  QuadTree *tree = buildTree(bodies, nBodies);
+  SetTargetFPS(TARGET_FPS);
   while (!WindowShouldClose()) {
+    /* printf("%fl\rn", GetFrameTime()); */
     QuadTree *tree = buildTree(bodies, nBodies);
     BeginDrawing();
     ClearBackground(BLACK);
-    for (int i = 0; i < nBodies; ++i) {
-      DrawCircleV(bodies[i].position, 1, WHITE);
+
+    for (uint32_t i = 0; i < nBodies; ++i) {
+      /* DrawCircleV(bodies[i].position, 1, WHITE); */
+      DrawPixelV(bodies[i].position, WHITE);
       // Small text of bodyid
     }
 
-    /* for (uint32_t i = 0; i < tree->nodes->length; ++i) { */
-    /*   Node node = tree->nodes->elements[i]; */
-    /*   DrawRectangleLinesEx(node.Squeare, 1, RED); */
-    /* } */
-    printf("%d\n", GetFPS());
     EndDrawing();
-    freeTree(tree);
-    for (int i = 0; i < nBodies; ++i) {
-      bodies[i].position = Vector2Add(bodies[i].position, Vector2Scale(bodies[i].velocity, GetFrameTime()));
-      if (bodies[i].position.x > WORLD_WIDTH - 5 || bodies[i].position.x < 5)
-        bodies[i].velocity.x *= -1;
-      if (bodies[i].position.y > WORLD_HEIGHT - 5 || bodies[i].position.y < 5) {
-        bodies[i].velocity.y *= -1;
+    updateAcceleration(bodies, tree, nBodies, 0.00001);
+    updateVelocitiesAndPositions(bodies, nBodies);
+    for (uint32_t i = 0; i < nBodies; ++i) {
+      if (bodies[i].position.x < 0 || bodies[i].position.x > WORLD_WIDTH ||
+          bodies[i].position.y < 0 || bodies[i].position.y > WORLD_HEIGHT) {
+        printf("Body %d out of bounds\n", i);
+        exit(1);
       }
     }
+    freeTree(tree);
   }
 
   return 0;

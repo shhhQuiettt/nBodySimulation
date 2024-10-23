@@ -12,9 +12,9 @@
 #define WORLD_HEIGHT 500
 #define WORLD_WIDTH 500
 #define MARGIN 10
-#define TARGET_FPS 60
+#define TARGET_FPS 6
 /* #define GRAVITATIONAL_CONSTANT 6.67430e-11 */
-#define GRAVITATIONAL_CONSTANT 1
+#define GRAVITATIONAL_CONSTANT 2
 #define N_BODIES 2
 
 typedef struct Body {
@@ -261,20 +261,26 @@ void updateAcceleration(Body *bodies, QuadTree *gravityTree, uint32_t nBody,
     do {
       Node *currentNode = &gravityTree->nodes->elements[nodeId];
       float distance =
-          Vector2Distance(bodies[bodyId].position, currentNode->SquereCenter);
+          Vector2Distance(bodies[bodyId].position, currentNode->centerOfMass);
       float size = currentNode->Squeare.width;
-      if (distance / size < maxSizeDistanceQuotient && !isLeaf(*currentNode)) {
+      if (!isLeaf(*currentNode)) {
+        /* if (distance / size < maxSizeDistanceQuotient &&
+         * !isLeaf(*currentNode)) { */
         nodeId = currentNode->children;
         continue;
       }
 
-      Vector2 accDirection =
-          Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position);
-      float accMagnitude = currentNode->mass / (distance * distance);
-      Vector2 acceleration = Vector2Scale(accDirection, accMagnitude);
+      if (currentNode->mass > 0 && distance > 0) {
+        Vector2 accDirection =
+            Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position);
+        float accMagnitude = currentNode->mass / ((distance * distance));
+        /* printf("acc direction: %f %f Magnitude: %f\n", accDirection.x, */
+        /*        accDirection.y, accMagnitude); */
+        Vector2 acceleration = Vector2Scale(accDirection, accMagnitude);
 
-      bodies[bodyId].acceleration =
-          Vector2Add(bodies[bodyId].acceleration, acceleration);
+        bodies[bodyId].acceleration =
+            Vector2Add(bodies[bodyId].acceleration, acceleration);
+      }
 
       nodeId = currentNode->next;
 
@@ -292,27 +298,47 @@ void updateVelocitiesAndPositions(Body *bodies, uint32_t nBody) {
                    Vector2Scale(bodies[bodyId].acceleration, GetFrameTime()));
 
     bodies[bodyId].position =
-        Vector2Add(bodies[bodyId].position, bodies[bodyId].velocity);
+        Vector2Add(bodies[bodyId].position,
+                   Vector2Scale(bodies[bodyId].velocity, GetFrameTime()));
+  }
+}
+
+void drawVelocities(Body *bodies, uint32_t nBody) {
+  for (uint32_t bodyId = 0; bodyId < nBody; ++bodyId) {
+    DrawLineV(bodies[bodyId].position,
+              Vector2Add(bodies[bodyId].position,
+                         Vector2Scale(bodies[bodyId].velocity, 1)),
+              RED);
+    printf("Magnitude of velocity of body %d: %f\n", bodyId, Vector2Length(bodies[bodyId].velocity));
+  }
+  printf("\n");
+}
+
+void drawAcceleration(Body *bodies, uint32_t nBody) {
+  for (uint32_t bodyId = 0; bodyId < nBody; ++bodyId) {
+    DrawLineV(bodies[bodyId].position,
+              Vector2Add(bodies[bodyId].position,
+                         Vector2Scale(bodies[bodyId].acceleration, 1)),
+              YELLOW);
   }
 }
 
 int main() {
-
   const uint32_t nBodies = N_BODIES;
   Body *bodies = malloc(nBodies * sizeof(Body));
 
-  SetRandomSeed(time(NULL));
-  /* SetRandomSeed(42); */
+  /* SetRandomSeed(time(NULL)); */
+  SetRandomSeed(45);
   for (uint32_t i = 0; i < nBodies; ++i) {
     /* float mass = GetRandomValue(1, 10); */
-    float mass = 5;
+    float mass = 500;
     float x = GetRandomValue(100, WORLD_WIDTH - 50);
     float y = GetRandomValue(100, WORLD_HEIGHT - 50);
 
     /* float vx = GetRandomValue(-1, 1); */
     /* float vy = GetRandomValue(-1, 1); */
-    float vx = 0;
-    float vy = 0;
+    float vx = 5;
+    float vy = 5;
 
     bodies[i] =
         (Body){mass, (Vector2){x, y}, (Vector2){vx, vy}, (Vector2){0, 0}};
@@ -327,13 +353,15 @@ int main() {
     ClearBackground(BLACK);
 
     for (uint32_t i = 0; i < nBodies; ++i) {
-      /* DrawCircleV(bodies[i].position, 1, WHITE); */
-      DrawPixelV(bodies[i].position, WHITE);
+      DrawCircleV(bodies[i].position, 3, WHITE);
+      /* DrawPixelV(bodies[i].position, WHITE); */
       // Small text of bodyid
     }
+    drawVelocities(bodies, nBodies);
+    drawAcceleration(bodies, nBodies);
 
     EndDrawing();
-    updateAcceleration(bodies, tree, nBodies, 0.00001);
+    updateAcceleration(bodies, tree, nBodies, 1000);
     updateVelocitiesAndPositions(bodies, nBodies);
     for (uint32_t i = 0; i < nBodies; ++i) {
       if (bodies[i].position.x < 0 || bodies[i].position.x > WORLD_WIDTH ||

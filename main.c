@@ -14,7 +14,7 @@
 #define TARGET_FPS 60
 #define GRAVITATIONAL_CONSTANT 6.67430e-2
 /* #define GRAVITATIONAL_CONSTANT 2 */
-#define N_BODIES 100
+#define N_BODIES 15
 
 typedef struct Body {
   float mass;
@@ -275,11 +275,15 @@ void updateAcceleration(Body *bodies, QuadTree *gravityTree, uint32_t nBody,
       }
 
       if (currentNode->mass > 0 && distance > 0) {
-        Vector2 accDirection =
-            Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position);
-        float accMagnitude = currentNode->mass / ((distance * distance));
-        /* printf("acc direction: %f %f Magnitude: %f\n", accDirection.x, */
-        /*        accDirection.y, accMagnitude); */
+        /* Vector2 accDirection = */
+        /*     Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position); */
+            
+        /* float accMagnitude = currentNode->mass / ((distance * distance)); */
+        /* /1* printf("acc direction: %f %f Magnitude: %f\n", accDirection.x, *1/ */
+        /* /1*        accDirection.y, accMagnitude); *1/ */
+        /* Vector2 acceleration = Vector2Scale(accDirection, accMagnitude); */
+        Vector2 accDirection = Vector2Normalize(Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position));
+        float accMagnitude = currentNode->mass / (distance * distance);
         Vector2 acceleration = Vector2Scale(accDirection, accMagnitude);
 
         bodies[bodyId].acceleration =
@@ -334,18 +338,21 @@ int main() {
 
   /* SetRandomSeed(time(NULL)); */
   SetRandomSeed(45);
-  for (uint32_t i = 0; i < nBodies; ++i) {
+  for (uint32_t i = 0; i < nBodies-1; ++i) {
     /* float mass = GetRandomValue(1, 10); */
-    float mass = GetRandomValue(600, 3000);
+    float mass = GetRandomValue(100, 200);
     float x = GetRandomValue(100, WORLD_WIDTH - 50);
     float y = GetRandomValue(100, WORLD_HEIGHT - 50);
 
-    float vx = GetRandomValue(-5, 5);
-    float vy = GetRandomValue(-5, 5);
+    float vx = GetRandomValue(-30, 30);
+    float vy = GetRandomValue(-30, 30);
 
     bodies[i] =
         (Body){mass, (Vector2){x, y}, (Vector2){vx, vy}, (Vector2){0, 0}};
   }
+
+  bodies[nBodies-1] = (Body){10000, (Vector2){WORLD_WIDTH / 2, WORLD_HEIGHT / 2},
+                             (Vector2){0, 0}, (Vector2){0, 0}};
 
   InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "N body simulaion");
   SetTargetFPS(TARGET_FPS);
@@ -357,7 +364,7 @@ int main() {
 
     for (uint32_t i = 0; i < nBodies; ++i) {
       DrawCircleV(bodies[i].position,
-                  2 + 7 * (bodies[i].mass - 600) / (3000 - 600), WHITE);
+                  2 + 7 * (bodies[i].mass - 100) / (10000 - 100), WHITE);
       /* DrawPixelV(bodies[i].position, WHITE); */
       // Small text of bodyid
     }

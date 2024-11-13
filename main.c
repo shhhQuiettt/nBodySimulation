@@ -9,13 +9,12 @@
 #include <sys/types.h>
 #include <time.h>
 
-#define WORLD_HEIGHT 500
-#define WORLD_WIDTH 500
-#define MARGIN 10
-#define TARGET_FPS 6
-/* #define GRAVITATIONAL_CONSTANT 6.67430e-11 */
-#define GRAVITATIONAL_CONSTANT 2
-#define N_BODIES 2
+#define WORLD_HEIGHT 900
+#define WORLD_WIDTH 900
+#define TARGET_FPS 60
+#define GRAVITATIONAL_CONSTANT 6.67430e-2
+/* #define GRAVITATIONAL_CONSTANT 2 */
+#define N_BODIES 100
 
 typedef struct Body {
   float mass;
@@ -257,11 +256,16 @@ void updateAcceleration(Body *bodies, QuadTree *gravityTree, uint32_t nBody,
   for (uint32_t bodyId = 0; bodyId < nBody; ++bodyId) {
 
     bodies[bodyId].acceleration = (Vector2){0.0, 0.0};
+
     uint32_t nodeId = 0;
     do {
       Node *currentNode = &gravityTree->nodes->elements[nodeId];
       float distance =
           Vector2Distance(bodies[bodyId].position, currentNode->centerOfMass);
+      if (distance < 1) {
+        distance = 0;
+      }
+
       float size = currentNode->Squeare.width;
       if (!isLeaf(*currentNode)) {
         /* if (distance / size < maxSizeDistanceQuotient &&
@@ -309,7 +313,8 @@ void drawVelocities(Body *bodies, uint32_t nBody) {
               Vector2Add(bodies[bodyId].position,
                          Vector2Scale(bodies[bodyId].velocity, 1)),
               RED);
-    printf("Magnitude of velocity of body %d: %f\n", bodyId, Vector2Length(bodies[bodyId].velocity));
+    printf("Magnitude of velocity of body %d: %f\n", bodyId,
+           Vector2Length(bodies[bodyId].velocity));
   }
   printf("\n");
 }
@@ -331,14 +336,12 @@ int main() {
   SetRandomSeed(45);
   for (uint32_t i = 0; i < nBodies; ++i) {
     /* float mass = GetRandomValue(1, 10); */
-    float mass = 500;
+    float mass = GetRandomValue(600, 3000);
     float x = GetRandomValue(100, WORLD_WIDTH - 50);
     float y = GetRandomValue(100, WORLD_HEIGHT - 50);
 
-    /* float vx = GetRandomValue(-1, 1); */
-    /* float vy = GetRandomValue(-1, 1); */
-    float vx = 5;
-    float vy = 5;
+    float vx = GetRandomValue(-5, 5);
+    float vy = GetRandomValue(-5, 5);
 
     bodies[i] =
         (Body){mass, (Vector2){x, y}, (Vector2){vx, vy}, (Vector2){0, 0}};
@@ -353,12 +356,13 @@ int main() {
     ClearBackground(BLACK);
 
     for (uint32_t i = 0; i < nBodies; ++i) {
-      DrawCircleV(bodies[i].position, 3, WHITE);
+      DrawCircleV(bodies[i].position,
+                  2 + 7 * (bodies[i].mass - 600) / (3000 - 600), WHITE);
       /* DrawPixelV(bodies[i].position, WHITE); */
       // Small text of bodyid
     }
-    drawVelocities(bodies, nBodies);
-    drawAcceleration(bodies, nBodies);
+    /* drawVelocities(bodies, nBodies); */
+    /* drawAcceleration(bodies, nBodies); */
 
     EndDrawing();
     updateAcceleration(bodies, tree, nBodies, 1000);
@@ -366,8 +370,11 @@ int main() {
     for (uint32_t i = 0; i < nBodies; ++i) {
       if (bodies[i].position.x < 0 || bodies[i].position.x > WORLD_WIDTH ||
           bodies[i].position.y < 0 || bodies[i].position.y > WORLD_HEIGHT) {
-        printf("Body %d out of bounds\n", i);
-        exit(1);
+        // dumb solution for now
+        bodies[i].position = (Vector2){WORLD_WIDTH / 2.0, WORLD_HEIGHT / 2.0};
+        bodies[i].velocity = (Vector2){0, 0};
+        bodies[i].acceleration = (Vector2){0, 0};
+        bodies[i].mass = 0;
       }
     }
     freeTree(tree);

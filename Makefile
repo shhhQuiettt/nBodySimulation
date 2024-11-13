@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -g -Wall -Wextra  -O2
+CFLAGS = -g -Wall -Wextra -O2 
 LDFLAGS = -lraylib -lm -lpthread -ldl -lrt -lX11
 
 # Project name and files

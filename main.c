@@ -9,12 +9,12 @@
 #include <sys/types.h>
 #include <time.h>
 
-#define WORLD_HEIGHT 900
-#define WORLD_WIDTH 900
+#define WORLD_HEIGHT 950
+#define WORLD_WIDTH 950
 #define TARGET_FPS 60
-#define GRAVITATIONAL_CONSTANT 6.67430e-2
+#define GRAVITATIONAL_CONSTANT 6.67430e0
 /* #define GRAVITATIONAL_CONSTANT 2 */
-#define N_BODIES 15
+#define N_BODIES 100
 
 typedef struct Body {
   float mass;
@@ -276,13 +276,16 @@ void updateAcceleration(Body *bodies, QuadTree *gravityTree, uint32_t nBody,
 
       if (currentNode->mass > 0 && distance > 0) {
         /* Vector2 accDirection = */
-        /*     Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position); */
-            
+        /*     Vector2Subtract(currentNode->centerOfMass,
+         * bodies[bodyId].position); */
+
         /* float accMagnitude = currentNode->mass / ((distance * distance)); */
-        /* /1* printf("acc direction: %f %f Magnitude: %f\n", accDirection.x, *1/ */
+        /* /1* printf("acc direction: %f %f Magnitude: %f\n", accDirection.x,
+         * *1/ */
         /* /1*        accDirection.y, accMagnitude); *1/ */
         /* Vector2 acceleration = Vector2Scale(accDirection, accMagnitude); */
-        Vector2 accDirection = Vector2Normalize(Vector2Subtract(currentNode->centerOfMass, bodies[bodyId].position));
+        Vector2 accDirection = Vector2Normalize(Vector2Subtract(
+            currentNode->centerOfMass, bodies[bodyId].position));
         float accMagnitude = currentNode->mass / (distance * distance);
         Vector2 acceleration = Vector2Scale(accDirection, accMagnitude);
 
@@ -338,21 +341,35 @@ int main() {
 
   /* SetRandomSeed(time(NULL)); */
   SetRandomSeed(45);
-  for (uint32_t i = 0; i < nBodies-1; ++i) {
-    /* float mass = GetRandomValue(1, 10); */
-    float mass = GetRandomValue(100, 200);
+
+  const uint32_t massLowerBound = 10;
+  const uint32_t massUpperBound = 50;
+
+  for (uint32_t i = 0; i < nBodies - 1; ++i) {
+    float mass = GetRandomValue(massLowerBound, massUpperBound);
     float x = GetRandomValue(100, WORLD_WIDTH - 50);
     float y = GetRandomValue(100, WORLD_HEIGHT - 50);
 
-    float vx = GetRandomValue(-30, 30);
-    float vy = GetRandomValue(-30, 30);
+    float vx = GetRandomValue(-25, 25);
+    float vy = GetRandomValue(-25, 25);
 
     bodies[i] =
         (Body){mass, (Vector2){x, y}, (Vector2){vx, vy}, (Vector2){0, 0}};
   }
 
-  bodies[nBodies-1] = (Body){10000, (Vector2){WORLD_WIDTH / 2, WORLD_HEIGHT / 2},
-                             (Vector2){0, 0}, (Vector2){0, 0}};
+  bodies[nBodies - 1] = (Body){
+      100000,
+      (Vector2){WORLD_WIDTH / 2, WORLD_HEIGHT / 2},
+      (Vector2){0, 0},
+  };
+
+  /*                            (Vector2){0, 0}, (Vector2){0, 0}}; */
+  /* bodies[0] = (Body){1000, (Vector2){WORLD_WIDTH / 2, WORLD_HEIGHT /
+     2}, */
+  /*                    (Vector2){0, 0}, (Vector2){0, 0}}; */
+
+  /* /1* bodies[1] = (Body){1000, (Vector2){WORLD_WIDTH / 2 + 100, */
+  /*    WORLD_HEIGHT / 2}}; *1/ */
 
   InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "N body simulaion");
   SetTargetFPS(TARGET_FPS);
@@ -364,16 +381,19 @@ int main() {
 
     for (uint32_t i = 0; i < nBodies; ++i) {
       DrawCircleV(bodies[i].position,
-                  2 + 7 * (bodies[i].mass - 100) / (10000 - 100), WHITE);
+                  bodies[i].mass <= massUpperBound
+                      ? 1 + 2 * (bodies[i].mass - massLowerBound) /
+                                (massUpperBound - massLowerBound)
+                      : 12,
+                  WHITE);
       /* DrawPixelV(bodies[i].position, WHITE); */
       // Small text of bodyid
     }
     /* drawVelocities(bodies, nBodies); */
     /* drawAcceleration(bodies, nBodies); */
 
-    EndDrawing();
     updateAcceleration(bodies, tree, nBodies, 1000);
-    updateVelocitiesAndPositions(bodies, nBodies);
+    EndDrawing();
     for (uint32_t i = 0; i < nBodies; ++i) {
       if (bodies[i].position.x < 0 || bodies[i].position.x > WORLD_WIDTH ||
           bodies[i].position.y < 0 || bodies[i].position.y > WORLD_HEIGHT) {
@@ -384,6 +404,8 @@ int main() {
         bodies[i].mass = 0;
       }
     }
+    updateVelocitiesAndPositions(bodies, nBodies);
+
     freeTree(tree);
   }
 

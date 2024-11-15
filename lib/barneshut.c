@@ -150,7 +150,8 @@ void updateAcceleration(Body *bodies, QuadTree *gravityTree, uint32_t nBody,
       Node *currentNode = &gravityTree->nodes->elements[nodeId];
       float distance =
           Vector2Distance(bodies[bodyId].position, currentNode->centerOfMass);
-      if (distance < 1) {
+
+      if (distance < 5) {
         distance = 0;
       }
 

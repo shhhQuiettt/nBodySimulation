@@ -1,5 +1,5 @@
-#include "lib/quadtree.h"
 #include "lib/barneshut.h"
+#include "lib/quadtree.h"
 
 #include "raylib.h"
 #include <inttypes.h>
@@ -10,16 +10,15 @@
 #include <sys/types.h>
 #include <time.h>
 
-#define WORLD_HEIGHT 10000
-#define WORLD_WIDTH 10000
+#define WORLD_HEIGHT 3000
+#define WORLD_WIDTH 3000
 
 #define FRAME_WIDTH 1000
 #define FRAME_HEIGHT 1000
 
 #define TARGET_FPS 60
 
-#define N_BODIES 100
-
+#define N_BODIES 3
 
 int main() {
   const uint32_t nBodies = N_BODIES;
@@ -33,8 +32,10 @@ int main() {
 
   for (uint32_t i = 0; i < nBodies - 1; ++i) {
     float mass = GetRandomValue(massLowerBound, massUpperBound);
-    float x = GetRandomValue(100, WORLD_WIDTH - 50);
-    float y = GetRandomValue(100, WORLD_HEIGHT - 50);
+    float x = GetRandomValue(WORLD_WIDTH / 2 - FRAME_WIDTH / 2,
+                             WORLD_WIDTH / 2 + FRAME_WIDTH / 2);
+    float y = GetRandomValue(WORLD_HEIGHT / 2 - FRAME_HEIGHT / 2,
+                             WORLD_HEIGHT / 2 + FRAME_HEIGHT / 2);
 
     float vx = GetRandomValue(-25, 25);
     float vy = GetRandomValue(-25, 25);
@@ -45,25 +46,34 @@ int main() {
 
   bodies[nBodies - 1] = (Body){
       100000,
-      (Vector2){FRAME_WIDTH / 2, FRAME_HEIGHT / 2},
+      (Vector2){WORLD_WIDTH/2.0, WORLD_HEIGHT/2.0},
       (Vector2){0, 0},
   };
 
-  /*                            (Vector2){0, 0}, (Vector2){0, 0}}; */
-  /* bodies[0] = (Body){1000, (Vector2){WORLD_WIDTH / 2, WORLD_HEIGHT /
-     2}, */
-  /*                    (Vector2){0, 0}, (Vector2){0, 0}}; */
-
-  /* /1* bodies[1] = (Body){1000, (Vector2){WORLD_WIDTH / 2 + 100, */
-  /*    WORLD_HEIGHT / 2}}; *1/ */
-
   InitWindow(FRAME_WIDTH, FRAME_HEIGHT, "N body simulaion");
+  Camera2D camera = {0};
+  camera.zoom = 1.0f;
+
   SetTargetFPS(TARGET_FPS);
   while (!WindowShouldClose()) {
     /* printf("%fl\rn", GetFrameTime()); */
+
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0) {
+      Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+      camera.offset = GetMousePosition();
+      camera.target = mouseWorldPos;
+
+      float scaleFactor = 1.0f + (0.25f * fabs(wheel));
+      if (wheel < 0)
+        scaleFactor = 1.0f / scaleFactor;
+
+      camera.zoom = Clamp(camera.zoom * scaleFactor, 0.125f, 64.0f);
+    }
     QuadTree *tree = buildTree(bodies, nBodies, WORLD_WIDTH, WORLD_HEIGHT);
     BeginDrawing();
     ClearBackground(BLACK);
+    BeginMode2D(camera);
 
     for (uint32_t i = 0; i < nBodies; ++i) {
       DrawCircleV(bodies[i].position,
@@ -88,7 +98,8 @@ int main() {
         printf("Body %d out of bounds\n", i);
         printf("Position: %f %f\n", bodies[i].position.x, bodies[i].position.y);
         printf("Velocity: %f %f\n", bodies[i].velocity.x, bodies[i].velocity.y);
-        printf("Acceleration: %f %f\n", bodies[i].acceleration.x, bodies[i].acceleration.y);
+        printf("Acceleration: %f %f\n", bodies[i].acceleration.x,
+               bodies[i].acceleration.y);
         printf("Mass: %f\n", bodies[i].mass);
         printf("Velocity magnitude %f\n", Vector2Length(bodies[i].velocity));
         exit(1);

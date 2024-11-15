@@ -5,7 +5,7 @@ LDFLAGS = -lraylib -lm -lpthread -ldl -lrt -lX11
 
 # Project name and files
 TARGET = nBody
-SRC = main.c
+SRC = main.c ./lib/quadtree.c ./lib/barneshut.c
 OBJ = $(SRC:.c=.o)
 
 # Default target
